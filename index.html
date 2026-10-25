@@ -122,6 +122,7 @@ tfoot td.name{z-index:4}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 .empty{padding:34px;text-align:center;color:var(--mut)}
 table.lista{width:100%}
+#buscarI{flex:1;min-width:250px}
 .lista th,.lista td{padding:6px 9px;white-space:nowrap;text-align:left;min-width:0}
 .lista td.r,.lista th.r{text-align:right}
 .lista td.c{text-align:center}
@@ -131,6 +132,8 @@ table.lista{width:100%}
 .lista tfoot td{position:static;font-weight:800}
 .tag{padding:1px 8px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid #1c3f73}
 .tag.act{color:var(--ok);border-color:#16805e}.tag.baja{color:var(--mut)}.tag.pend{color:var(--cyan)}
+.tag.pv{color:var(--warn);border-color:#8a5a00}.tag.venc{color:var(--bad);border-color:#7a2236}
+.bd.venc{background:linear-gradient(180deg,#ff9fb1,#ff4d6d)}
 /* casillas */
 input[type=checkbox]{appearance:none;-webkit-appearance:none;display:inline-grid;place-content:center;width:20px;height:20px;margin:0;border:2px solid #2a5190;border-radius:6px;background:#050d1c;cursor:pointer;transition:.12s;vertical-align:middle}
 input[type=checkbox]:hover:not(:disabled){border-color:var(--cyan)}
@@ -193,6 +196,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   </div>
   <div class="stats" id="stats"></div>
   <div class="alerta" id="alerta"></div>
+  <div class="alerta" id="alertaV"></div>
   <div id="wrap"><table id="tabla"></table></div>
 </section>
 
@@ -203,13 +207,20 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
     <form id="fInsc" autocomplete="off">
       <div class="grid">
         <div class="w2"><label for="fNom">Nombre completo</label><input type="text" id="fNom" required maxlength="80"></div>
+        <div><label for="fRut">RUT</label><input type="text" id="fRut" maxlength="12" placeholder="12.345.678-5" autocomplete="off"></div>
         <div><label for="fEdad">Edad</label><input type="number" id="fEdad" min="1" max="110" required></div>
-        <div><label for="fPlan">Plan</label>
+        <div><label for="fPlan">Plan semanal</label>
           <select id="fPlan">
             <option value="2">2 días por semana</option>
             <option value="3" selected>3 días por semana</option>
             <option value="4">4 días por semana</option>
             <option value="5">5 días por semana</option>
+          </select></div>
+        <div id="fDurW"><label for="fDur">Duración del plan</label>
+          <select id="fDur">
+            <option value="0" selected>Mensual (mes a mes)</option>
+            <option value="6">Semestral (pago único)</option>
+            <option value="12">Anual (pago único)</option>
           </select></div>
         <div id="fMontoW"><label for="fMonto">Monto pagado ($)</label><input type="number" id="fMonto" min="0" step="1" inputmode="numeric" placeholder="0"></div>
         <div><label for="fTel">Teléfono</label><input type="tel" id="fTel" maxlength="30" placeholder="+56 9 …"></div>
@@ -218,11 +229,13 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
         <div id="fDesdeW" hidden><label for="fDesde">El nuevo plan rige desde</label><input type="date" id="fDesde"></div>
         <div id="fBajaW" hidden><label for="fBaja">Fecha de baja (vacío = sigue activo)</label><input type="date" id="fBaja"></div>
       </div>
+      <p class="note" id="fDurNote" hidden></p>
+      <p class="note" id="fVigInfo" hidden></p>
       <div class="row">
         <button type="submit" class="pri" id="fSave">Inscribir</button>
         <button type="button" id="fCancel" hidden>Cancelar edición</button>
       </div>
-      <p class="note" id="fNote">Al inscribir, la persona aparece sola en la asistencia desde su fecha de ingreso y su % parte ese día. Los pagos posteriores se registran con el botón $ de la lista.</p>
+      <p class="note" id="fNote">Al inscribir, la persona aparece sola en la asistencia desde su fecha de ingreso y su % parte ese día. Los pagos posteriores se registran con el botón $ de la lista, y las renovaciones (mensual, semestral o anual) con el botón ↻.</p>
       <div class="okmsg" id="inscOk" hidden></div>
     </form>
   </div>
@@ -230,7 +243,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   <div class="card">
     <h2>Inscritos <span class="st" id="inscCount"></span></h2>
     <div class="bar" style="margin-bottom:10px">
-      <input type="search" id="buscarI" placeholder="Buscar por nombre o teléfono…">
+      <input type="search" id="buscarI" placeholder="Buscar por nombre, RUT o teléfono…">
       <select id="estadoI">
         <option value="act">Activos</option>
         <option value="baja">De baja</option>
@@ -393,6 +406,33 @@ function doPost(e) {
   <div class="acts"><button type="button" id="payClose">Cerrar</button></div>
 </dialog>
 
+<!-- ================= RENOVAR PLAN ================= -->
+<dialog id="dlgR">
+  <h2 id="renT">Renovar plan</h2>
+  <p class="note" id="renInfo" style="margin-top:0"></p>
+  <form id="fRen" autocomplete="off">
+    <div class="grid">
+      <div><label for="rDur">Duración del plan</label>
+        <select id="rDur">
+          <option value="0">Mensual (mes a mes)</option>
+          <option value="6">Semestral (pago único)</option>
+          <option value="12">Anual (pago único)</option>
+        </select></div>
+      <div><label for="rPlan">Plan semanal</label>
+        <select id="rPlan">
+          <option value="2">2 días por semana</option>
+          <option value="3">3 días por semana</option>
+          <option value="4">4 días por semana</option>
+          <option value="5">5 días por semana</option>
+        </select></div>
+      <div><label for="rDesde">Vigente desde</label><input type="date" id="rDesde" required></div>
+      <div><label for="rMonto">Monto pagado ($)</label><input type="number" id="rMonto" min="0" step="1" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <p class="note" id="rNote"></p>
+    <div class="acts"><button type="button" id="rCancel">Cancelar</button><button type="submit" class="pri">Renovar</button></div>
+  </form>
+</dialog>
+
 <div id="toast">Guardado ✓</div>
 
 <script>
@@ -439,10 +479,13 @@ function migrate(r){
       delete u.since;delete u.until;
     }
     if(!u.plans||!u.plans.length)u.plans=[{from:u.periods[0].from,n:3}];
+    if(!Array.isArray(u.membs)||!u.membs.length)u.membs=[{from:u.periods[0].from,dur:0}];
+    u.membs.forEach(x=>{if(![0,6,12].includes(x.dur))x.dur=0});
+    u.rut=u.rut||'';
     if(u.age===undefined)u.age=null;
     u.phone=u.phone||'';u.emergency=u.emergency||'';
     if(!Array.isArray(u.pagos))u.pagos=[];
-    normPlans(u);
+    normPlans(u);normMembs(u);
   });
   return r;
 }
@@ -451,8 +494,45 @@ function normPlans(u){
   u.plans.slice().sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0).forEach(p=>m.set(p.from,p));
   u.plans=[...m.values()];
 }
+function normMembs(u){
+  const m=new Map();
+  u.membs.slice().sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0).forEach(p=>m.set(p.from,p));
+  u.membs=[...m.values()];
+}
 function planAtS(u,s){let n=u.plans[0].n;for(const p of u.plans){if(p.from<=s)n=p.n}return n}
 const planAt=(u,d)=>planAtS(u,iso(d));
+
+/* ---------- duración del plan (mensual / semestral / anual) ---------- */
+const DUR_TXT={0:'Mensual',6:'Semestral',12:'Anual'};
+const durTxt=d=>DUR_TXT[d]||'Mensual';
+function membAtS(u,s){let e=u.membs[0];for(const p of u.membs){if(p.from<=s)e=p}return e}
+// suma n meses a una fecha AAAA-MM-DD (31-oct + 6 meses = 30-abr)
+function addMonthsS(s,n){
+  const d=pd(s),y=d.getFullYear(),m=d.getMonth()+n,last=new Date(y,m+1,0).getDate();
+  return iso(new Date(y,m,Math.min(d.getDate(),last)));
+}
+// Mensual: sin vencimiento fijo. Semestral/anual: pago único, vence el día anterior al aniversario.
+const termEnd=e=>iso(addDays(pd(addMonthsS(e.from,e.dur)),-1));
+function vigencia(u,ref){
+  const s=iso(ref||TODAY()),e=membAtS(u,s);
+  if(!e.dur)return {dur:0,desde:e.from,vence:null,dias:null,estado:'sin'};
+  let vence=termEnd(e),aMensual=false;
+  // renovaciones ya registradas que empiezan justo al terminar (o antes) extienden el vencimiento
+  for(const n of u.membs){
+    if(n.from<=e.from)continue;
+    if(n.from>iso(addDays(pd(vence),1)))break;
+    if(!n.dur){aMensual=true;break}
+    const ne=termEnd(n);if(ne>vence)vence=ne;
+  }
+  const dias=Math.round((pd(vence)-pd(s))/86400000);
+  return {dur:e.dur,desde:e.from,vence,dias,estado:dias<0?'vencida':(aMensual?'vigente':dias<=15?'porvencer':'vigente')};
+}
+
+/* ---------- RUT chileno ---------- */
+const rutClean=s=>String(s||'').replace(/[^0-9kK]/g,'').toUpperCase();
+function rutDV(body){let sum=0,mul=2;for(let i=body.length-1;i>=0;i--){sum+=+body[i]*mul;mul=mul===7?2:mul+1}const r=11-(sum%11);return r===11?'0':r===10?'K':String(r)}
+function rutValid(s){const c=rutClean(s);if(c.length<2||c.length>9)return false;const b=c.slice(0,-1);return /^\d+$/.test(b)&&rutDV(b)===c.slice(-1)}
+function rutFormat(s){const c=rutClean(s);if(c.length<2)return c;return c.slice(0,-1).replace(/\B(?=(\d{3})+(?!\d))/g,'.')+'-'+c.slice(-1)}
 function weekPlan(u,d){const w=iso(monday(d)),st=u.periods[0].from;return planAtS(u,w<st?st:w)}
 function attended(u,d){const a=(db.att[mk(d.getFullYear(),d.getMonth())]||{})[u.id];return !!a&&a.includes(d.getDate())}
 function inPeriods(u,d){const s=iso(d);return u.periods.some(p=>p.from<=s&&(!p.to||s<=p.to))}
@@ -522,10 +602,10 @@ function estadoTxt(u){
 function daysSince(s){return Math.round((TODAY()-pd(s))/86400000)}
 function inscRows(sheet){
   const d=s=>s?(sheet?s:fmt(s)):'';
-  const rows=[['Nombre completo','Edad','Plan (días/sem)','Teléfono','Contacto de emergencia','Fecha de ingreso','Estado','Total pagado','Último pago','Monto último pago']];
+  const rows=[['Nombre completo','RUT','Edad','Plan (días/sem)','Duración','Vence','Teléfono','Contacto de emergencia','Fecha de ingreso','Estado','Total pagado','Último pago','Monto último pago']];
   allSorted().forEach(u=>{
-    const lp=lastPay(u);
-    rows.push([u.name,u.age==null?'':u.age,planAtS(u,iso(TODAY())),u.phone||'',u.emergency||'',d(u.periods[0].from),estadoTxt(u),totalPagado(u),lp?d(lp.fecha):'',lp?lp.monto:'']);
+    const lp=lastPay(u),v=vigencia(u);
+    rows.push([u.name,u.rut||'',u.age==null?'':u.age,planAtS(u,iso(TODAY())),durTxt(v.dur),v.vence?d(v.vence):'',u.phone||'',u.emergency||'',d(u.periods[0].from),estadoTxt(u),totalPagado(u),lp?d(lp.fecha):'',lp?lp.monto:'']);
   });
   return rows;
 }
@@ -648,10 +728,10 @@ function monthSheet(y,m,opts){
 function inscSheets(){
   const hdr=r=>r.map(v=>({v,s:1}));
   const a=inscRows(false),b=pagosRows(false);
-  const rowsA=[hdr(a[0]),...a.slice(1).map(r=>r.map((v,j)=>(j===7||j===9)&&v!==''?{v,s:8}:v))];
+  const rowsA=[hdr(a[0]),...a.slice(1).map(r=>r.map((v,j)=>(j===10||j===12)&&v!==''?{v,s:8}:v))];
   const rowsB=[hdr(b[0]),...b.slice(1).map(r=>r.map((v,j)=>j===2?{v,s:8}:v))];
   return [
-    {name:'Inscritos',rows:rowsA,freezeRows:1,freezeCols:1,cols:[[1,1,30],[2,3,12],[4,4,18],[5,5,32],[6,7,16],[8,10,16]]},
+    {name:'Inscritos',rows:rowsA,freezeRows:1,freezeCols:1,cols:[[1,1,30],[2,2,14],[3,4,10],[5,6,13],[7,7,18],[8,8,32],[9,10,15],[11,13,16]]},
     {name:'Pagos',rows:rowsB,freezeRows:1,freezeCols:0,cols:[[1,1,14],[2,2,30],[3,3,14],[4,4,36]]}
   ];
 }
@@ -720,9 +800,9 @@ function render(){
   const col=new Array(n+1).fill(0);let sum=0,k=0;const warns=[];
   list.forEach(u=>{
     const a=att[u.id]||[],ov=overDays(u,y,m),exp=expectedFor(u,y,m),plan=planAt(u,ref);
-    const per=u.periods[u.periods.length-1];
-    const tip=`Ingreso: ${fmt(u.periods[0].from)} · Plan: ${plan} días/semana`+(per.to?` · Baja: ${fmt(per.to)}`:'');
-    h+=`<tr><td class="name"><span class="nm" title="${esc(tip)}">${esc(u.name)}</span><span class="bd" title="${plan} días por semana">${plan}×</span><span class="act"><button data-a="edit" data-u="${u.id}" title="Ver ficha / editar">✎</button><button data-a="del" data-u="${u.id}" title="Eliminar">🗑</button></span></td>`;
+    const per=u.periods[u.periods.length-1],vg=vigencia(u);
+    const tip=`Ingreso: ${fmt(u.periods[0].from)} · Plan: ${plan} días/semana · ${durTxt(vg.dur)}`+(vg.vence?` hasta ${fmt(vg.vence)}${vg.estado==='vencida'?' (VENCIDO)':''}`:'')+(per.to?` · Baja: ${fmt(per.to)}`:'');
+    h+=`<tr><td class="name"><span class="nm" title="${esc(tip)}">${esc(u.name)}</span><span class="bd${vg.estado==='vencida'?' venc':''}" title="${esc(tip)}">${plan}×</span><span class="act"><button data-a="edit" data-u="${u.id}" title="Ver ficha / editar">✎</button><button data-a="del" data-u="${u.id}" title="Eliminar">🗑</button></span></td>`;
     let cnt=0;
     for(let d=1;d<=n;d++){
       const dt=new Date(y,m,d),w=dt.getDay();
@@ -749,6 +829,18 @@ function render(){
   const al=$('alerta');
   if(warns.length){al.innerHTML=`⚠ <b>Superan su plan semanal este mes:</b> ${warns.join(' · ')} <span style="opacity:.7">(días de más)</span>`;al.classList.add('on')}
   else al.classList.remove('on');
+  const venc=[],pv=[];
+  db.users.forEach(u=>{
+    if(estado(u)==='baja')return;
+    const v=vigencia(u);
+    if(v.estado==='vencida')venc.push(`${esc(u.name)} (${durTxt(v.dur).toLowerCase()}, venció el ${fmt(v.vence)})`);
+    else if(v.estado==='porvencer')pv.push(`${esc(u.name)} (${fmt(v.vence)})`);
+  });
+  const parts=[];
+  if(venc.length)parts.push(`<b>Planes vencidos:</b> ${venc.join(' · ')}`);
+  if(pv.length)parts.push(`<b>Vencen en los próximos 15 días:</b> ${pv.join(' · ')}`);
+  const av=$('alertaV');
+  if(parts.length){av.innerHTML='⏰ '+parts.join('<br>');av.classList.add('on')}else av.classList.remove('on');
   $('mes').value=m;$('anio').value=y;
 }
 function renderCfg(){
@@ -800,7 +892,17 @@ function resetForm(){
   $('fIng').value=iso(TODAY());$('fPlan').value='3';
   $('inscT').textContent='Nueva inscripción';$('fSave').textContent='Inscribir';
   $('fMontoW').hidden=false;$('fDesdeW').hidden=true;$('fBajaW').hidden=true;$('fCancel').hidden=true;
+  $('fDur').value='0';$('fDurW').hidden=false;$('fVigInfo').hidden=true;updDurNote();
 }
+function updDurNote(){
+  const dur=+$('fDur').value,ing=$('fIng').value,n=$('fDurNote');
+  if(editId||!dur||!ing){n.hidden=true;return}
+  n.textContent=`Pago único: cubre ${dur} meses, desde el ${fmt(ing)} hasta el ${fmt(iso(addDays(pd(addMonthsS(ing,dur)),-1)))}. Ingresa abajo el monto total pagado.`;
+  n.hidden=false;
+}
+$('fDur').addEventListener('change',updDurNote);
+$('fIng').addEventListener('input',updDurNote);
+$('fRut').addEventListener('blur',()=>{const v=$('fRut').value.trim();if(v)$('fRut').value=rutFormat(v)});
 function loadForm(u){
   editId=u.id;
   $('inscT').textContent='Editar ficha';$('fSave').textContent='Guardar cambios';
@@ -811,6 +913,11 @@ function loadForm(u){
   $('fMontoW').hidden=true;
   $('fDesde').value=iso(TODAY());$('fDesdeW').hidden=true;
   $('fBajaW').hidden=false;$('fBaja').value=u.periods[u.periods.length-1].to||'';
+  $('fRut').value=u.rut||'';
+  $('fDurW').hidden=true;$('fDurNote').hidden=true;
+  const v=vigencia(u);
+  $('fVigInfo').textContent=`Duración del plan: ${durTxt(v.dur)}`+(v.vence?` · vigente desde ${fmt(v.desde)} hasta ${fmt(v.vence)}`:' · pago mes a mes')+'. Para renovar o cambiar la duración usa el botón ↻ de la lista de inscritos.';
+  $('fVigInfo').hidden=false;
   $('fCancel').hidden=false;$('inscOk').hidden=true;
 }
 function editUser(u){showTab('insc');loadForm(u);window.scrollTo(0,0);$('fNom').focus()}
@@ -826,23 +933,30 @@ $('fInsc').addEventListener('submit',e=>{
   if(!(edad>=1&&edad<=110)){alert('Ingresa una edad válida (1 a 110).');return}
   const dup=db.users.find(x=>x.id!==editId&&norm(x.name)===norm(nom));
   if(dup){alert('Ya existe un usuario llamado “'+dup.name+'”.');return}
+  const rut=rutFormat($('fRut').value);
+  if(rut){
+    const dr=db.users.find(x=>x.id!==editId&&rutClean(x.rut)===rutClean(rut));
+    if(dr){alert('Ya existe un usuario con ese RUT: '+dr.name+'.');return}
+    if(!rutValid(rut)&&!confirm('El RUT '+rut+' no parece válido (el dígito verificador no coincide).\n\n¿Guardar de todos modos?'))return;
+  }
   if(!editId){
-    const monto=Math.round(Number($('fMonto').value||0));
+    const monto=Math.round(Number($('fMonto').value||0)),dur=+$('fDur').value;
     if(!(monto>=0)){alert('El monto no es válido.');return}
-    db.users.push({id:uid(),name:nom,age:edad,phone:tel,emergency:emer,periods:[{from:ing,to:null}],plans:[{from:ing,n:plan}],
-      pagos:monto>0?[{id:uid(),fecha:ing,monto,nota:'Inscripción'}]:[]});
+    db.users.push({id:uid(),name:nom,rut,age:edad,phone:tel,emergency:emer,periods:[{from:ing,to:null}],plans:[{from:ing,n:plan}],membs:[{from:ing,dur}],
+      pagos:monto>0?[{id:uid(),fecha:ing,monto,nota:dur?`Inscripción · plan ${durTxt(dur).toLowerCase()}`:'Inscripción'}]:[]});
     save();resetForm();renderAll();
-    const ok=$('inscOk');ok.textContent=`✓ ${nom} quedó inscrito/a (plan de ${plan} días). Ya aparece en la asistencia desde el ${fmt(ing)}.`;ok.hidden=false;
+    const hasta=dur?fmt(iso(addDays(pd(addMonthsS(ing,dur)),-1))):'';
+    const ok=$('inscOk');ok.textContent=`✓ ${nom} quedó inscrito/a (${plan} días por semana, plan ${durTxt(dur).toLowerCase()}${dur?` hasta el ${hasta}`:''}). Ya aparece en la asistencia desde el ${fmt(ing)}.`;ok.hidden=false;
   }else{
     const u=db.users.find(x=>x.id===editId);if(!u){resetForm();return}
     const last=u.periods[u.periods.length-1],lastFrom=u.periods.length>1?last.from:ing,bj=$('fBaja').value;
     if(bj&&bj<lastFrom){alert('La fecha de baja no puede ser anterior a la fecha de ingreso.');return}
     if(u.periods.length>1&&ing>u.periods[1].from){alert('La fecha de ingreso no puede ser posterior a la reactivación posterior.');return}
-    u.name=nom;u.age=edad;u.phone=tel;u.emergency=emer;
+    u.name=nom;u.rut=rut;u.age=edad;u.phone=tel;u.emergency=emer;
     const old=u.periods[0].from;
-    if(ing!==old){u.periods[0].from=ing;u.plans.forEach(p=>{if(p.from<ing||p.from===old)p.from=ing})}
+    if(ing!==old){u.periods[0].from=ing;u.plans.forEach(p=>{if(p.from<ing||p.from===old)p.from=ing});u.membs.forEach(p=>{if(p.from<ing||p.from===old)p.from=ing})}
     if(plan!==plan0){let f=$('fDesde').value||iso(TODAY());if(f<ing)f=ing;u.plans.push({from:f,n:plan})}
-    normPlans(u);last.to=bj||null;
+    normPlans(u);normMembs(u);last.to=bj||null;
     save();resetForm();renderAll();
     const ok=$('inscOk');ok.textContent=`✓ Ficha de ${nom} actualizada.`;ok.hidden=false;
   }
@@ -856,25 +970,26 @@ function renderInsc(){
     const e=estado(u);
     if(f==='act'&&e==='baja')return false;
     if(f==='baja'&&e!=='baja')return false;
-    return !qi||norm(u.name).includes(norm(qi))||(u.phone||'').replace(/\D/g,'').includes(qi.replace(/\D/g,'')||'§');
+    return !qi||norm(u.name).includes(norm(qi))||(u.phone||'').replace(/\D/g,'').includes(qi.replace(/\D/g,'')||'§')||(/\d{3}/.test(qi)&&rutClean(u.rut).includes(rutClean(qi)));
   });
   const act=db.users.filter(u=>estado(u)!=='baja').length;
   $('inscCount').textContent=`${act} activos · ${db.users.length} en total`;
-  let h='<thead><tr><th class="l1">Nombre</th><th class="c">Edad</th><th class="c">Plan</th><th>Teléfono</th><th>Contacto de emergencia</th><th>Ingreso</th><th class="r">Total pagado</th><th>Último pago</th><th>Estado</th><th></th></tr></thead><tbody>';
+  let h='<thead><tr><th class="l1">Nombre</th><th>RUT</th><th class="c">Edad</th><th>Plan</th><th>Teléfono</th><th>Contacto de emergencia</th><th>Ingreso</th><th>Vence</th><th class="r">Total pagado</th><th>Último pago</th><th>Estado</th><th></th></tr></thead><tbody>';
   let sum=0;
   list.forEach(u=>{
-    const lp=lastPay(u),tot=totalPagado(u),e=estado(u);sum+=tot;
+    const lp=lastPay(u),tot=totalPagado(u),e=estado(u),v=vigencia(u);sum+=tot;
     const dias=lp?daysSince(lp.fecha):null;
-    const lpTxt=lp?`${fmt(lp.fecha)} · ${money(lp.monto)}${dias>=0?` <span class="note ${dias>31&&e==='act'?'warn':''}">(hace ${dias} d)</span>`:''}`:'<span class="note">Sin pagos</span>';
+    const lpTxt=lp?`${fmt(lp.fecha)} · ${money(lp.monto)}${dias>=0?` <span class="note ${dias>31&&e==='act'&&!v.dur?'warn':''}">(hace ${dias} d)</span>`:''}`:'<span class="note">Sin pagos</span>';
     const tel=(u.phone||'').trim(),dig=tel.replace(/[^\d+]/g,'');
-    h+=`<tr><td class="l1">${esc(u.name)}</td><td class="c">${u.age==null?'—':u.age}</td><td class="c"><span class="bd" style="margin:0">${planAtS(u,iso(TODAY()))}×</span></td>`
-     +`<td>${tel?(dig?`<a href="tel:${esc(dig)}">${esc(tel)}</a>`:esc(tel)):'—'}</td><td>${esc(u.emergency||'—')}</td><td>${fmt(u.periods[0].from)}</td>`
+    const vcell=v.vence?`${fmt(v.vence)} <span class="tag ${v.estado==='vencida'?'venc':v.estado==='porvencer'?'pv':'act'}">${v.estado==='vencida'?'Vencido':v.estado==='porvencer'?(v.dias===0?'vence hoy':'en '+v.dias+' d'):'Vigente'}</span>`:'<span class="note">—</span>';
+    h+=`<tr><td class="l1">${esc(u.name)}</td><td>${esc(u.rut||'—')}</td><td class="c">${u.age==null?'—':u.age}</td><td><span class="bd" style="margin:0">${planAtS(u,iso(TODAY()))}×</span> <span class="note">${durTxt(v.dur)}</span></td>`
+     +`<td>${tel?(dig?`<a href="tel:${esc(dig)}">${esc(tel)}</a>`:esc(tel)):'—'}</td><td>${esc(u.emergency||'—')}</td><td>${fmt(u.periods[0].from)}</td><td>${vcell}</td>`
      +`<td class="r">${money(tot)}</td><td>${lpTxt}</td><td><span class="tag ${e}">${esc(estadoTxt(u))}</span></td>`
-     +`<td class="act"><button data-i="pay" data-u="${u.id}" title="Pagos">$</button><button data-i="edit" data-u="${u.id}" title="Editar ficha">✎</button><button data-i="del" data-u="${u.id}" title="Eliminar">🗑</button></td></tr>`;
+     +`<td class="act"><button data-i="pay" data-u="${u.id}" title="Pagos">$</button>${e!=='baja'?`<button data-i="renew" data-u="${u.id}" title="Renovar plan / cambiar duración">↻</button>`:''}<button data-i="edit" data-u="${u.id}" title="Editar ficha">✎</button><button data-i="del" data-u="${u.id}" title="Eliminar">🗑</button></td></tr>`;
   });
   h+='</tbody>';
-  h+=list.length?`<tfoot><tr><td class="l1">${list.length} inscritos</td><td colspan="5"></td><td class="r">${money(sum)}</td><td colspan="3"></td></tr></tfoot>`
-    :`<tfoot><tr><td colspan="10" class="empty">${db.users.length?'Sin resultados.':'Aún no hay inscritos. Completa el formulario de arriba.'}</td></tr></tfoot>`;
+  h+=list.length?`<tfoot><tr><td class="l1">${list.length} inscritos</td><td colspan="7"></td><td class="r">${money(sum)}</td><td colspan="3"></td></tr></tfoot>`
+    :`<tfoot><tr><td colspan="12" class="empty">${db.users.length?'Sin resultados.':'Aún no hay inscritos. Completa el formulario de arriba.'}</td></tr></tfoot>`;
   $('tInsc').innerHTML=h;
 }
 $('buscarI').addEventListener('input',e=>{qi=e.target.value;renderInsc()});
@@ -885,6 +1000,7 @@ $('tInsc').addEventListener('click',e=>{
   if(b.dataset.i==='edit'){loadForm(u);window.scrollTo(0,0);$('fNom').focus()}
   else if(b.dataset.i==='del')delUser(u);
   else if(b.dataset.i==='pay')openPay(u);
+  else if(b.dataset.i==='renew')openRen(u);
 });
 
 /* pagos */
@@ -918,6 +1034,38 @@ $('payList').addEventListener('click',e=>{
   u.pagos=u.pagos.filter(x=>x.id!==p.id);save();renderPay();renderInsc();
 });
 $('payClose').onclick=()=>$('dlgP').close();
+
+/* renovar plan / cambiar duración */
+let renId=null;
+function updRenNote(){
+  const dur=+$('rDur').value,d=$('rDesde').value;
+  $('rNote').textContent=!d?'':dur?`Pago único: cubre ${dur} meses, desde el ${fmt(d)} hasta el ${fmt(iso(addDays(pd(addMonthsS(d,dur)),-1)))}.`:'Plan mensual: sin vencimiento fijo; los pagos se registran mes a mes con el botón $.';
+}
+function openRen(u){
+  renId=u.id;const t=TODAY(),v=vigencia(u);
+  $('renT').textContent='Renovar plan · '+u.name;
+  $('renInfo').textContent=`Actual: ${planAtS(u,iso(t))} días por semana · ${durTxt(v.dur)}`+(v.vence?` · ${v.estado==='vencida'?'venció el':'vence el'} ${fmt(v.vence)}`:' · pago mes a mes');
+  $('rDur').value=String(v.dur);$('rPlan').value=String(planAtS(u,iso(t)));
+  // si el plan sigue vigente, la renovación parte al día siguiente de su vencimiento
+  $('rDesde').value=(v.estado==='vigente'||v.estado==='porvencer')?iso(addDays(pd(v.vence),1)):iso(t);
+  $('rMonto').value='';updRenNote();
+  $('dlgR').showModal();setTimeout(()=>$('rMonto').focus(),30);
+}
+$('rDur').addEventListener('change',updRenNote);
+$('rDesde').addEventListener('input',updRenNote);
+$('rCancel').onclick=()=>$('dlgR').close();
+$('fRen').addEventListener('submit',e=>{
+  e.preventDefault();
+  const u=db.users.find(x=>x.id===renId);if(!u)return;
+  const dur=+$('rDur').value,n=+$('rPlan').value,desde=$('rDesde').value,monto=Math.round(Number($('rMonto').value||0));
+  if(!desde)return;
+  if(desde<u.periods[0].from){alert('La fecha de inicio no puede ser anterior al ingreso ('+fmt(u.periods[0].from)+').');return}
+  if(!(monto>=0)){alert('El monto no es válido.');return}
+  u.membs.push({from:desde,dur});normMembs(u);
+  if(planAtS(u,desde)!==n){u.plans.push({from:desde,n});normPlans(u)}
+  if(monto>0)u.pagos.push({id:uid(),fecha:iso(TODAY()),monto,nota:dur?`Renovación ${durTxt(dur).toLowerCase()} (${dur} meses)`:'Plan mensual'});
+  save();$('dlgR').close();renderAll();toast('Plan renovado ✓');
+});
 
 /* ---------- resto de controles ---------- */
 $('buscar').addEventListener('input',e=>{q=e.target.value;render()});
@@ -1220,6 +1368,17 @@ try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}ca
 fillCfg();resetForm();renderAll();
 if(SC.gh.enabled||SC.gs.enabled)setTimeout(syncAll,500);
 </script>
-<script>if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+<script>
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  window.addEventListener('load',function(){
+    var had=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+    navigator.serviceWorker.addEventListener('controllerchange',function(){
+      if(had&&confirm('Hay una versión nueva de la app. ¿Recargar ahora para usarla?'))location.reload();
+      had=true;
+    });
+  });
+}
+</script>
 </body>
 </html>

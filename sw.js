@@ -1,5 +1,5 @@
 // Sube el número de versión cada vez que actualices index.html
-const CACHE = 'bluefit-gym-v1';
+const CACHE = 'bluefit-gym-v2';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
