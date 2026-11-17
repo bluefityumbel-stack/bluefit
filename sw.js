@@ -1,5 +1,5 @@
 // Sube el número de versión cada vez que actualices index.html
-const CACHE = 'bluefit-gym-v2';
+const CACHE = 'bluefit-gym-v4';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -24,5 +24,16 @@ self.addEventListener('fetch', e => {
   if (r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
   e.respondWith(
     caches.match(r, { ignoreSearch: true }).then(hit => hit || fetch(r))
+  );
+});
+
+// Al tocar una notificación de renovación, abre (o enfoca) la app.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => {
+      const c = cs.find(x => 'focus' in x);
+      return c ? c.focus() : self.clients.openWindow('./');
+    })
   );
 });
