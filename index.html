@@ -135,6 +135,12 @@ table.lista{width:100%}
 .tag.pv{color:var(--warn);border-color:#8a5a00}.tag.venc{color:var(--bad);border-color:#7a2236}
 .bd.venc{background:linear-gradient(180deg,#ff9fb1,#ff4d6d)}
 .cnt{display:inline-block;min-width:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:#ff4d6d;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;vertical-align:middle}
+.fbar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end;margin:0 0 10px}
+.fbar .f{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mut);font-weight:700}
+.fbar .f input,.fbar .f select{min-width:0;width:auto}
+.fbar .f input[type=date]{width:136px}.fbar .f input[type=number]{width:104px}
+.fbar .f.chk{flex-direction:row;align-items:center;gap:6px;padding-bottom:7px}
+th.srt{cursor:pointer;user-select:none}th.srt:hover{color:var(--cyan)}
 .sbtn{padding:5px 11px;font-size:12px;margin-right:6px}
 .sbtn.dng{color:var(--bad);border-color:#7a2236}
 #alertaV{margin:0 0 12px}
@@ -160,7 +166,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   .hero{flex-wrap:wrap}.pill{margin-left:0}
   .name{min-width:150px}td.name .nm{max-width:84px}td.name .act{display:none}
   .tot{position:static!important;border-left:none}th.tot{position:sticky!important}}
-@media print{body{background:#fff;color:#000;padding:0}.bar,.tabs,#tab-insc,#tab-ing,#tab-aj,#alertaV,.stats,.alerta,#toast,.pill{display:none!important}.hero{box-shadow:none;background:#fff;border:none}.hero h1{color:#0a6fd6;-webkit-text-fill-color:#0a6fd6;filter:none}#wrap{max-height:none;border:none;background:#fff;box-shadow:none}th,td,.name,td.tot,th.name,.tot{background:#fff!important;color:#000!important;position:static}.act{display:none}}
+@media print{body{background:#fff;color:#000;padding:0}.bar,.fbar,.tabs,#tab-insc,#tab-ing,#tab-aj,#alertaV,.stats,.alerta,#toast,.pill{display:none!important}.hero{box-shadow:none;background:#fff;border:none}.hero h1{color:#0a6fd6;-webkit-text-fill-color:#0a6fd6;filter:none}#wrap{max-height:none;border:none;background:#fff;box-shadow:none}th,td,.name,td.tot,th.name,.tot{background:#fff!important;color:#000!important;position:static}.act{display:none}}
 </style>
 </head>
 <body>
@@ -200,6 +206,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
     <button class="alt" id="xAnio">⬇ Excel del año</button>
     <button class="alt" id="imprimir">🖨 Imprimir</button>
   </div>
+  <div class="fbar" id="fbA"></div>
   <div class="stats" id="stats"></div>
   <div class="alerta" id="alerta"></div>
   <div id="wrap"><table id="tabla"></table></div>
@@ -257,6 +264,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
       <span class="sp"></span>
       <button class="alt" id="xInsc">⬇ Excel de inscritos</button>
     </div>
+    <div class="fbar" id="fbI"></div>
     <div class="tw"><table class="lista" id="tInsc"></table></div>
   </div>
 </section>
@@ -268,6 +276,7 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
     <div class="bar" style="margin-bottom:10px">
       <input type="search" id="buscarG" placeholder="Buscar por nombre o RUT…" style="flex:1;min-width:250px">
     </div>
+    <div class="fbar" id="fbG"></div>
     <div class="tw"><table class="lista" id="tIng"></table></div>
     <p class="note">Ordenado por fecha de renovación (los más urgentes primero). “Renovar” registra un nuevo ciclo; “Eliminar cliente” lo borra de todas las pestañas, con su asistencia y pagos.</p>
   </div>
@@ -516,16 +525,23 @@ function migrate(r){
     u.phone=u.phone||'';u.emergency=u.emergency||'';
     if(!Array.isArray(u.pagos))u.pagos=[];
     normPlans(u);normMembs(u);
-    // versiones anteriores: la mensualidad no tenía vencimiento (dur 0). Ahora es un ciclo de 1 mes:
-    // se toma como ciclo actual el que parte en el último aniversario de su día de ingreso.
+    // versiones anteriores: la mensualidad no tenía vencimiento (dur 0). Ahora es un ciclo de 1 mes que parte
+    // en el último aniversario del día de ingreso que ya tiene un pago registrado (sin pagos: el ingreso).
     const lastM=u.membs[u.membs.length-1];
-    u.membs.forEach(x=>{if(x.dur===0){x.dur=1;if(x===lastM)x.from=lastAnniv(x.from)}});
+    u.membs.forEach(x=>{if(x.dur===0){x.dur=1;if(x===lastM)x.from=lastAnniv(x.from,lastPagoDesde(u,x.from))}});
+    // corrección única: la versión anterior adelantó el ciclo al último aniversario aunque no hubiera renovado
+    if(!r.cfg.anchorFix&&u.membs.length===1&&u.membs[0].dur===1&&u.membs[0].from!==u.periods[0].from){
+      const ing=u.periods[0].from;u.membs[0].from=lastAnniv(ing,lastPagoDesde(u,ing));
+    }
   });
+  r.cfg.anchorFix=1;
   return r;
 }
-function lastAnniv(from){
-  const t=iso(TODAY());let k=0;
-  while(addMonthsS(from,k+1)<=t)k++;
+const lastPagoDesde=(u,from)=>u.pagos.reduce((m,p)=>p.fecha>=from&&p.fecha>m?p.fecha:m,from);
+// último aniversario de `from` que no pasa de `ref` (y de hoy)
+function lastAnniv(from,ref){
+  const t=iso(TODAY()),lim=ref&&ref<t?ref:t;let k=0;
+  while(addMonthsS(from,k+1)<=lim)k++;
   return addMonthsS(from,k);
 }
 function normPlans(u){
@@ -656,13 +672,73 @@ function expectedFor(u,y,m){
 }
 const pctOf=(cnt,exp)=>exp>0?Math.min(1,cnt/exp):null;
 const pcls=p=>p==null?'':p>=.8?'ok':p>=.6?'warn':'bad';
+/* ---------- filtros ---------- */
+const FS={a:{},i:{},g:{}};            // estado de filtros por sección
+const FCFG={a:['plan','ren','ins','ord','exc'],i:['plan','dur','ren','ins','rnv','pay'],g:['plan','dur','ren','ins','rnv','pay']};
+const FRENDER={a:()=>render(),i:()=>renderInsc(),g:()=>renderIng()};
+function fbarHtml(sec){
+  const has=k=>FCFG[sec].includes(k),o=(v,t)=>`<option value="${v}">${t}</option>`;
+  const sel=(k,lab,opts)=>`<label class="f">${lab}<select data-f="${k}">${opts}</select></label>`;
+  const inp=(k,lab,t,ph)=>`<label class="f">${lab}<input type="${t}" data-f="${k}"${ph?` placeholder="${ph}"`:''}></label>`;
+  let h='';
+  if(has('plan'))h+=sel('plan','Plan semanal',o('','Todos')+[2,3,4,5].map(n=>o(n,n+' días')).join(''));
+  if(has('dur'))h+=sel('dur','Duración',o('','Todas')+o(1,'Mensual')+o(6,'Semestral')+o(12,'Anual'));
+  if(has('ren'))h+=sel('ren','Renovación',o('','Todos')+o('pend','Vencidos o por renovar')+o('venc','Vencidos')+o('prox','Por renovar (con aviso)')+o('vig','Vigentes'));
+  if(has('ins'))h+=inp('desde','Inscripción desde','date')+inp('hasta','Inscripción hasta','date');
+  if(has('rnv'))h+=inp('rdesde','Renovación desde','date')+inp('rhasta','Renovación hasta','date');
+  if(has('pay'))h+=inp('min','Pagado desde ($)','number','0')+inp('max','Pagado hasta ($)','number','');
+  if(has('ord'))h+=sel('ord','Ordenar por',o('','Nombre')+o('ing','Inscripción (más reciente)')+o('ingA','Inscripción (más antigua)')+o('ren','Renovación (más próxima)'));
+  if(has('exc'))h+=`<label class="f chk"><input type="checkbox" data-f="exc"> Solo con exceso</label>`;
+  return h+'<button type="button" data-clr="1">Limpiar filtros</button>';
+}
+function passF(u,f,vg){
+  vg=vg||vigencia(u);
+  if(f.plan&&planAtS(u,todayS())!==+f.plan)return false;
+  if(f.dur&&vg.dur!==+f.dur)return false;
+  const r=f.ren;
+  if(r==='venc'&&vg.estado!=='vencida')return false;
+  if(r==='prox'&&!(vg.estado==='hoy'||vg.estado==='porvencer'))return false;
+  if(r==='pend'&&vg.estado==='vigente')return false;
+  if(r==='vig'&&vg.estado!=='vigente')return false;
+  const ing=u.periods[0].from;
+  if(f.desde&&ing<f.desde)return false;
+  if(f.hasta&&ing>f.hasta)return false;
+  if(f.rdesde&&vg.renueva<f.rdesde)return false;
+  if(f.rhasta&&vg.renueva>f.rhasta)return false;
+  if(f.min!==undefined&&f.min!==''){if(totalPagado(u)<+f.min)return false}
+  if(f.max!==undefined&&f.max!==''){if(totalPagado(u)>+f.max)return false}
+  return true;
+}
+const SORTG={name:u=>norm(u.name),rut:u=>rutClean(u.rut),age:u=>u.age==null?-1:u.age,plan:u=>planAtS(u,todayS()),
+  ing:u=>u.periods[0].from,ren:u=>vigencia(u).renueva,pay:u=>totalPagado(u),lp:u=>{const p=lastPay(u);return p?p.fecha:''}};
+function sortBy(list,st,get){
+  const g=SORTG[st.k]||SORTG.name,d=st.d;
+  return list.slice().sort((a,b)=>{
+    const x=g(get(a)),y=g(get(b));
+    const c=typeof x==='number'?x-y:String(x).localeCompare(String(y),'es');
+    return c?c*d:norm(get(a).name).localeCompare(norm(get(b).name));
+  });
+}
+const SORT={i:{k:'name',d:1},g:{k:'ren',d:1}};
+const thS=(sec,lab,k,cls)=>`<th class="srt${cls?' '+cls:''}" data-s="${k}" title="Ordenar">${lab}${SORT[sec].k===k?(SORT[sec].d>0?' ▲':' ▼'):''}</th>`;
 let q='';
 function visible(key,useQ){
   const y=+key.slice(0,4),m=+key.slice(5,7)-1;
   return db.users.filter(u=>{
     const has=((db.att[key]||{})[u.id]||[]).length>0;
-    return (has||overlaps(u,y,m))&&(!useQ||!q||norm(u.name).includes(norm(q)));
-  }).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
+    if(!(has||overlaps(u,y,m)))return false;
+    if(!useQ)return true;
+    if(q&&!norm(u.name).includes(norm(q)))return false;
+    const f=FS.a;
+    if(!passF(u,f))return false;
+    if(f.exc&&!overDays(u,y,m).size)return false;
+    return true;
+  }).sort((a,b)=>{
+    const o=FS.a.ord;
+    if(o==='ing'||o==='ingA'){const c=a.periods[0].from.localeCompare(b.periods[0].from);if(c)return o==='ing'?-c:c}
+    else if(o==='ren'){const c=vigencia(a).renueva.localeCompare(vigencia(b).renueva);if(c)return c}
+    return a.name.localeCompare(b.name,'es',{sensitivity:'base'});
+  });
 }
 
 /* ---------- datos de inscripción y pagos ---------- */
@@ -980,11 +1056,11 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 /* ---------- pestaña Ingresos ---------- */
 let qg='';
 function renderIng(){
-  const list=db.users.filter(u=>estado(u)!=='baja').map(u=>({u,v:vigencia(u)}))
-    .filter(x=>!qg||norm(x.u.name).includes(norm(qg))||(/\d{3}/.test(qg)&&rutClean(x.u.rut).includes(rutClean(qg))))
-    .sort((a,b)=>a.v.renueva<b.v.renueva?-1:a.v.renueva>b.v.renueva?1:a.u.name.localeCompare(b.u.name,'es'));
-  $('ingCount').textContent=list.length+' clientes activos';
-  let h='<thead><tr><th class="l1">Nombre completo</th><th>RUT</th><th>Fecha de inscripción</th><th>Fecha de renovación</th><th></th></tr></thead><tbody>';
+  let list=db.users.filter(u=>estado(u)!=='baja').map(u=>({u,v:vigencia(u)}))
+    .filter(x=>(!qg||norm(x.u.name).includes(norm(qg))||(/\d{3}/.test(qg)&&rutClean(x.u.rut).includes(rutClean(qg))))&&passF(x.u,FS.g,x.v));
+  list=sortBy(list,SORT.g,x=>x.u===undefined?x:x.u);
+  $('ingCount').textContent=list.length+' de '+db.users.filter(u=>estado(u)!=='baja').length+' clientes activos';
+  let h='<thead><tr>'+thS('g','Nombre completo','name','l1')+thS('g','RUT','rut')+thS('g','Fecha de inscripción','ing')+thS('g','Fecha de renovación','ren')+'<th></th></tr></thead><tbody>';
   list.forEach(({u,v})=>{
     h+=`<tr><td class="l1">${esc(u.name)}</td><td>${esc(u.rut||'—')}</td><td>${fmt(u.periods[0].from)}</td>`
       +`<td>${fmt(v.renueva)} <span class="tag ${tagCls(v)}">${esc(tagTxt(v))}</span></td>`
@@ -1111,15 +1187,17 @@ $('fInsc').addEventListener('submit',e=>{
 let qi='';
 function renderInsc(){
   const f=$('estadoI').value;
-  const list=allSorted().filter(u=>{
+  let list=allSorted().filter(u=>{
     const e=estado(u);
     if(f==='act'&&e==='baja')return false;
     if(f==='baja'&&e!=='baja')return false;
+    if(!passF(u,FS.i))return false;
     return !qi||norm(u.name).includes(norm(qi))||(u.phone||'').replace(/\D/g,'').includes(qi.replace(/\D/g,'')||'§')||(/\d{3}/.test(qi)&&rutClean(u.rut).includes(rutClean(qi)));
   });
+  list=sortBy(list,SORT.i,u=>u);
   const act=db.users.filter(u=>estado(u)!=='baja').length;
-  $('inscCount').textContent=`${act} activos · ${db.users.length} en total`;
-  let h='<thead><tr><th class="l1">Nombre</th><th>RUT</th><th class="c">Edad</th><th>Plan</th><th>Teléfono</th><th>Contacto de emergencia</th><th>Ingreso</th><th>Renovación</th><th class="r">Total pagado</th><th>Último pago</th><th>Estado</th><th></th></tr></thead><tbody>';
+  $('inscCount').textContent=`${list.length} mostrados · ${act} activos · ${db.users.length} en total`;
+  let h='<thead><tr>'+thS('i','Nombre','name','l1')+thS('i','RUT','rut')+thS('i','Edad','age','c')+thS('i','Plan','plan')+'<th>Teléfono</th><th>Contacto de emergencia</th>'+thS('i','Ingreso','ing')+thS('i','Renovación','ren')+thS('i','Total pagado','pay','r')+thS('i','Último pago','lp')+'<th>Estado</th><th></th></tr></thead><tbody>';
   let sum=0;
   list.forEach(u=>{
     const lp=lastPay(u),tot=totalPagado(u),e=estado(u),v=vigencia(u);sum+=tot;
@@ -1509,8 +1587,25 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'&&(SC.gh.enabled||SC.gs.enabled)&&Date.now()-lastVis>20000){lastVis=Date.now();syncAll()}
 });
 
+function initFilters(){
+['a','i','g'].forEach(sec=>{
+  const box=$('fb'+sec.toUpperCase());box.innerHTML=fbarHtml(sec);
+  const upd=e=>{const el=e.target.closest('[data-f]');if(!el)return;FS[sec][el.dataset.f]=el.type==='checkbox'?el.checked:el.value;FRENDER[sec]()};
+  box.addEventListener('input',upd);box.addEventListener('change',upd);
+  box.addEventListener('click',e=>{if(!e.target.closest('[data-clr]'))return;FS[sec]={};
+    box.querySelectorAll('[data-f]').forEach(el=>{if(el.type==='checkbox')el.checked=false;else el.value=''});
+    if(sec==='a'){q='';$('buscar').value=''}if(sec==='i'){qi='';$('buscarI').value='';$('estadoI').value='act'}if(sec==='g'){qg='';$('buscarG').value=''}
+    FRENDER[sec]()});
+});
+[['i','tInsc'],['g','tIng']].forEach(([sec,id])=>$(id).addEventListener('click',e=>{
+  const th=e.target.closest('th[data-s]');if(!th)return;
+  const k=th.dataset.s,S=SORT[sec];
+  if(S.k===k)S.d=-S.d;else{S.k=k;S.d=1}
+  FRENDER[sec]();
+}));
+}
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-fillCfg();resetForm();$('leadM').value=leadM();paintNotifSt();renderAll();checkAvisos();
+initFilters();fillCfg();resetForm();$('leadM').value=leadM();paintNotifSt();renderAll();checkAvisos();
 if(SC.gh.enabled||SC.gs.enabled)setTimeout(syncAll,500);
 </script>
 <script>
