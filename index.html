@@ -234,10 +234,11 @@ dialog .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
             <option value="6">Semestral (pago único)</option>
             <option value="12">Anual (pago único)</option>
           </select></div>
-        <div id="fMontoW"><label for="fMonto">Monto pagado ($)</label><input type="number" id="fMonto" min="0" step="1" inputmode="numeric" placeholder="0"></div>
+        <div id="fMontoW"><label for="fMonto" id="fMontoL">Monto pagado ($)</label><input type="number" id="fMonto" min="0" step="1" inputmode="numeric" placeholder="0"></div>
         <div><label for="fTel">Teléfono</label><input type="tel" id="fTel" maxlength="30" placeholder="+56 9 …"></div>
         <div class="w2"><label for="fEmer">Contacto de emergencia</label><input type="text" id="fEmer" maxlength="120" placeholder="Nombre y teléfono"></div>
         <div><label for="fIng">Fecha de ingreso</label><input type="date" id="fIng" required></div>
+        <div id="fCicloW" hidden><label for="fCiclo">Inicio del plan actual (define la renovación)</label><input type="date" id="fCiclo"></div>
         <div id="fDesdeW" hidden><label for="fDesde">El nuevo plan rige desde</label><input type="date" id="fDesde"></div>
         <div id="fBajaW" hidden><label for="fBaja">Fecha de baja (vacío = sigue activo)</label><input type="date" id="fBaja"></div>
       </div>
@@ -1107,12 +1108,12 @@ function delUser(u){
 }
 
 /* ---------- inscripción ---------- */
-let editId=null,plan0=3;
+let editId=null,plan0=3,dur0=1,ciclo0='';
 function resetForm(){
   editId=null;$('fInsc').reset();
   $('fIng').value=iso(TODAY());$('fPlan').value='3';
   $('inscT').textContent='Nueva inscripción';$('fSave').textContent='Inscribir';
-  $('fMontoW').hidden=false;$('fDesdeW').hidden=true;$('fBajaW').hidden=true;$('fCancel').hidden=true;
+  $('fMontoW').hidden=false;$('fMontoL').textContent='Monto pagado ($)';$('fCicloW').hidden=true;$('fDesdeW').hidden=true;$('fBajaW').hidden=true;$('fCancel').hidden=true;
   $('fDur').value='1';$('fDurW').hidden=false;$('fVigInfo').hidden=true;updDurNote();
 }
 function updDurNote(){
@@ -1131,11 +1132,13 @@ function loadForm(u){
   plan0=planAtS(u,iso(TODAY()));$('fPlan').value=plan0;
   $('fTel').value=u.phone||'';$('fEmer').value=u.emergency||'';
   $('fIng').value=u.periods[0].from;
-  $('fMontoW').hidden=true;
+  $('fMontoW').hidden=false;$('fMontoL').textContent='Total pagado ($)';$('fMonto').value=totalPagado(u);
   $('fDesde').value=iso(TODAY());$('fDesdeW').hidden=true;
   $('fBajaW').hidden=false;$('fBaja').value=u.periods[u.periods.length-1].to||'';
   $('fRut').value=u.rut||'';
-  $('fDurW').hidden=true;$('fDurNote').hidden=true;
+  const cur=membAtS(u,todayS());
+  $('fDurW').hidden=false;$('fDur').value=String(cur.dur||1);$('fDurNote').hidden=true;
+  $('fCicloW').hidden=false;$('fCiclo').value=cur.from;dur0=cur.dur||1;ciclo0=cur.from;
   const v=vigencia(u);
   $('fVigInfo').textContent=`Plan ${durTxt(v.dur).toLowerCase()} · vigente desde ${fmt(v.desde)} hasta ${fmt(v.vence)} (renueva el ${fmt(v.renueva)}). Para renovar o cambiar la duración usa el botón ↻ de la lista de inscritos.`;
   $('fVigInfo').hidden=false;
@@ -1170,6 +1173,8 @@ $('fInsc').addEventListener('submit',e=>{
     const ok=$('inscOk');ok.textContent=`✓ ${nom} quedó inscrito/a (${plan} días por semana, plan ${durTxt(dur).toLowerCase()} hasta el ${hasta}; debe renovar el ${fmt(addMonthsS(ing,dur))}). Ya aparece en la asistencia desde el ${fmt(ing)}.`;ok.hidden=false;
   }else{
     const u=db.users.find(x=>x.id===editId);if(!u){resetForm();return}
+    if($('fCiclo').value&&$('fCiclo').value!==ciclo0&&$('fCiclo').value<ing){alert('El inicio del plan no puede ser anterior al ingreso.');return}
+    if(!(Number($('fMonto').value||0)>=0)){alert('El monto no es válido.');return}
     const last=u.periods[u.periods.length-1],lastFrom=u.periods.length>1?last.from:ing,bj=$('fBaja').value;
     if(bj&&bj<lastFrom){alert('La fecha de baja no puede ser anterior a la fecha de ingreso.');return}
     if(u.periods.length>1&&ing>u.periods[1].from){alert('La fecha de ingreso no puede ser posterior a la reactivación posterior.');return}
@@ -1178,6 +1183,19 @@ $('fInsc').addEventListener('submit',e=>{
     if(ing!==old){u.periods[0].from=ing;u.plans.forEach(p=>{if(p.from<ing||p.from===old)p.from=ing});u.membs.forEach(p=>{if(p.from<ing||p.from===old)p.from=ing})}
     if(plan!==plan0){let f=$('fDesde').value||iso(TODAY());if(f<ing)f=ing;u.plans.push({from:f,n:plan})}
     normPlans(u);normMembs(u);last.to=bj||null;
+    // duración e inicio del plan actual (define la fecha de renovación)
+    const cur=membAtS(u,todayS()),nd=+$('fDur').value,nc=$('fCiclo').value;
+    if(nc&&nc!==ciclo0){if(nc<u.periods[0].from){alert('El inicio del plan no puede ser anterior al ingreso ('+fmt(u.periods[0].from)+').');return}cur.from=nc}
+    if(nd!==dur0)cur.dur=nd;
+    normMembs(u);
+    // monto: es el total pagado; con 0 o 1 pago se corrige ese pago, con varios se agrega un ajuste
+    const nm=Math.round(Number($('fMonto').value||0)),tot=totalPagado(u);
+    if(!(nm>=0)){alert('El monto no es válido.');return}
+    if(nm!==tot){
+      if(u.pagos.length===0)u.pagos.push({id:uid(),fecha:u.periods[0].from,monto:nm,nota:'Inscripción'});
+      else if(u.pagos.length===1){if(nm>0)u.pagos[0].monto=nm;else u.pagos=[]}
+      else u.pagos.push({id:uid(),fecha:todayS(),monto:nm-tot,nota:'Ajuste de monto'});
+    }
     save();resetForm();renderAll();
     const ok=$('inscOk');ok.textContent=`✓ Ficha de ${nom} actualizada.`;ok.hidden=false;
   }
